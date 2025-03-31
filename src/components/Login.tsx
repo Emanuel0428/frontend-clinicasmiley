@@ -13,7 +13,6 @@ const Login: React.FC = () => {
     user: {
       id: number;
       usuario: string;
-      // otras propiedades de user
     };
   }
 

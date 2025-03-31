@@ -47,7 +47,7 @@ useEffect(() => {
         fetchAssistants(),
         fetchServices(),
         fetchPaymentMethods(), // Esto ya debería devolver los descpMetodo
-        axios.get(`${import.meta.env.VITE_API_URL}/api/records`, {
+        axios.get<DentalRecord[]>(`${import.meta.env.VITE_API_URL}/api/records`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('token')}`,
           },
@@ -58,7 +58,7 @@ useEffect(() => {
       setAsistentes(assistants);
       setServicios(services);
       setMetodosPago(paymentMethods); // paymentMethods contiene los descpMetodo
-      setRegistros(records.data);
+      setRegistros(records.data as DentalRecord[]);
 
       setFormData((prev) => ({
         ...prev,
@@ -106,7 +106,7 @@ useEffect(() => {
         esAuxiliar: esAuxiliar,
       };
 
-      const response = await axios.post(
+      const response = await axios.post<DentalRecord>(
         `${import.meta.env.VITE_API_URL}/api/records`,
         newRecord,
         {
@@ -145,7 +145,7 @@ useEffect(() => {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
-        data: { ids: selectedRecords },
+        params: { ids: selectedRecords },
       });
 
       setRegistros(registros.filter((registro) => !selectedRecords.includes(registro.id)));

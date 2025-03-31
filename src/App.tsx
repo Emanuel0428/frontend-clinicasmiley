@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import SedesNavbar from './components/SedesNavbar';
 import RegistrosDiarios from './components/RegistrosDiarios';
 import Liquidacion from './components/Liquidacion';
 import EstandarizacionServicios from './components/EstandarizacionServicios';
@@ -16,6 +15,8 @@ const ProtectedRoute: React.FC<{ children: JSX.Element }> = ({ children }) => {
   const selectedSede = localStorage.getItem('selectedSede');
 
   if (!token) return <Navigate to="/login" />;
+  if (token === 'undefined') return <Navigate to="/login" />;
+  if (token === 'null') return <Navigate to="/login" />;
   if (!selectedSede) return <Navigate to="/sedes" />;
   return children;
 };
