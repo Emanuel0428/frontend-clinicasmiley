@@ -150,6 +150,7 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
     setTitularCredito('');
     setEsDatáfono(false);
     setEsDatáfonoAbono(false);
+    setError(''); // Cambio: Limpiar el error al resetear el formulario
   };
 
   const calcularDescuentoYValorTotal = () => {
@@ -190,37 +191,85 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      if (formData.metodoPago && !valorPagado) {
-        setError('Por favor, ingresa el valor pagado.');
-        return;
-      }
+    setError(''); // Cambio: Limpiar el error anterior antes de nuevas validaciones
 
-      if (aplicarAbono && !metodoPagoAbono) {
+    // Cambio: Validaciones de campos obligatorios
+    if (!formData.nombreDoctor) {
+      setError('Por favor, selecciona un doctor o auxiliar.');
+      return;
+    }
+    if (!formData.nombrePaciente.trim()) {
+      setError('Por favor, ingresa el nombre del paciente.');
+      return;
+    }
+    if (!formData.docId.trim()) {
+      setError('Por favor, ingresa el documento del paciente.');
+      return;
+    }
+    if (!formData.servicio) {
+      setError('Por favor, selecciona un servicio.');
+      return;
+    }
+
+    // Cambio: Validaciones para abono
+    if (aplicarAbono) {
+      if (!metodoPagoAbono) {
         setError('Por favor, selecciona un método de pago para el abono.');
         return;
       }
+      const abonoValue = parseFloat(abonoInput);
+      if (isNaN(abonoValue) || abonoValue <= 0) {
+        setError('El abono debe ser un valor numérico mayor a 0.');
+        return;
+      }
+      if (metodoPagoAbono === 'Transferencia' && !idCuentaAbono) {
+        setError('Por favor, selecciona una cuenta para la transferencia (abono).');
+        return;
+      }
+    }
 
+    // Cambio: Validaciones para descuento
+    if (aplicarDescuento) {
+      const descuentoValue = parseFloat(descuentoInput);
+      if (isNaN(descuentoValue) || descuentoValue < 0) {
+        setError('El descuento debe ser un valor numérico no negativo.');
+        return;
+      }
+      if (esPorcentaje && (descuentoValue > 100 || descuentoValue <= 0)) {
+        setError('El porcentaje de descuento debe estar entre 0 y 100.');
+        return;
+      }
+      if (!esPorcentaje && descuentoValue > (servicios.find(s => s.nombre === formData.servicio)?.precio || 0)) {
+        setError('El descuento en valor no puede superar el precio del servicio.');
+        return;
+      }
+    }
+
+    // Cambio: Validaciones para método de pago principal
+    if (formData.metodoPago) {
+      const valorPagadoNum = parseFloat(valorPagado);
+      if (!valorPagado || isNaN(valorPagadoNum) || valorPagadoNum <= 0) {
+        setError('Por favor, ingresa un valor pagado válido mayor a 0.');
+        return;
+      }
       if (formData.metodoPago === 'Transferencia' && !idCuenta) {
         setError('Por favor, selecciona una cuenta para la transferencia (valor pagado).');
         return;
       }
-      if (aplicarAbono && metodoPagoAbono === 'Transferencia' && !idCuentaAbono) {
-        setError('Por favor, selecciona una cuenta para la transferencia (abono).');
-        return;
-      }
-
       if (formData.metodoPago === 'Crédito') {
-        if (!montoPrestado || parseFloat(montoPrestado) <= 0) {
+        const montoPrestadoNum = parseFloat(montoPrestado);
+        if (!montoPrestado || isNaN(montoPrestadoNum) || montoPrestadoNum <= 0) {
           setError('Por favor, ingresa un monto prestado válido para Crédito.');
           return;
         }
-        if (!titularCredito) {
-          setError('Por favor, ingresa el nombre del titular del crédito para Crédito.');
+        if (!titularCredito.trim()) {
+          setError('Por favor, ingresa el nombre del titular del crédito.');
           return;
         }
       }
+    }
 
+    try {
       const newRecord = {
         nombreDoctor: formData.nombreDoctor,
         nombrePaciente: formData.nombrePaciente,
@@ -256,7 +305,7 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
       setSelectedRecords([]);
       resetForm();
     } catch (err) {
-      console.error('Error al cargar los datos:', err);
+      console.error('Error al guardar el registro:', err);
       setError('Error al guardar el registro. Por favor, intenta de nuevo.');
     }
   };
@@ -270,14 +319,13 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
     try {
       await axios.delete(`${import.meta.env.VITE_API_URL}/api/records`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        // este error es debido a que se usa "params" para axios, pero al realizarlo así, no funciona, con data sí.
         data: { ids: selectedRecords, id_sede: parseInt(id_sede || '0', 10) },
       });
 
       setRegistros(registros.filter((registro) => !selectedRecords.includes(registro.id)));
       setSelectedRecords([]);
     } catch (err) {
-      console.error('Error al cargar los datos:', err);
+      console.error('Error al eliminar los registros:', err);
       setError('Error al eliminar los registros. Por favor, intenta de nuevo.');
     }
   };
@@ -291,7 +339,6 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
   const registrosFiltrados = registros.filter((registro) => registro.fecha === fechaSeleccionada);
 
   if (loading) return <div className="text-center py-6">Cargando datos...</div>;
-  if (error) return <div className="text-center py-6 text-red-500">{error}</div>;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
@@ -307,6 +354,13 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
           />
         </div>
       </div>
+
+      {/* Cambio: Mostrar mensaje de error en la UI */}
+      {error && (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+          <p>{error}</p>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="bg-white shadow-md rounded-lg p-6 mb-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -347,7 +401,7 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
             <input
               type="text"
               value={formData.nombrePaciente}
-              onChange={(e) => setFormData({ ...formData, nombrePaciente: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, nombrePaciente: e.target.value.trim() })} // Cambio: Trim para evitar espacios en blanco
               className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               required
             />
@@ -358,7 +412,7 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
             <input
               type="text"
               value={formData.docId}
-              onChange={(e) => setFormData({ ...formData, docId: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, docId: e.target.value.trim() })} // Cambio: Trim para evitar espacios en blanco
               className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
               required
             />
@@ -417,7 +471,7 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
                           step="1000"
                           value={abonoInput}
                           onChange={(e) => setAbonoInput(e.target.value)}
-                          className="w-full rounded-md patient's border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                          className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                           required
                         />
                         {esDatáfonoAbono && (
@@ -566,7 +620,7 @@ const RegistrosDiarios: React.FC<RegistrosDiariosProps> = ({ registros, setRegis
                       <input
                         type="text"
                         value={titularCredito}
-                        onChange={(e) => setTitularCredito(e.target.value)}
+                        onChange={(e) => setTitularCredito(e.target.value.trim())} // Cambio: Trim para evitar espacios en blanco
                         className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                         required
                       />

@@ -25,6 +25,8 @@ const Liquidacion: React.FC<LiquidacionProps> = ({ registros, setRegistros }) =>
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   const [totalLiquidacion, setTotalLiquidacion] = useState<number>(0);
+  // Cambio: Añadido estado para controlar el modo de agrupación
+  const [modoAgrupacion, setModoAgrupacion] = useState<'pacienteServicio' | 'paciente' | 'ninguno'>('pacienteServicio');
 
   const navigate = useNavigate();
   const id_sede = localStorage.getItem('selectedSede');
@@ -83,32 +85,42 @@ const Liquidacion: React.FC<LiquidacionProps> = ({ registros, setRegistros }) =>
     return coincideDoctor && coincideFecha && coincidePaciente && coincideServicio;
   });
 
-  const registrosAgrupados: { [key: string]: DentalRecord[] } = registrosFiltrados.reduce(
-    (acc, registro) => {
-      const key = `${registro.nombrePaciente}-${registro.servicio}`;
-      if (!acc[key]) {
-        acc[key] = [];
-      }
-      acc[key].push(registro);
-      return acc;
-    },
-    {} as { [key: string]: DentalRecord[] }
-  );
+  // Cambio: Modificada la lógica de agrupación para soportar modos opcionales
+  const agruparRegistros = (registros: DentalRecord[]): { [key: string]: DentalRecord[] } => {
+    return registros.reduce(
+      (acc, registro) => {
+        let key: string;
+        if (modoAgrupacion === 'pacienteServicio') {
+          key = `${registro.nombrePaciente}-${registro.servicio}`;
+        } else if (modoAgrupacion === 'paciente') {
+          key = registro.nombrePaciente;
+        } else {
+          key = registro.id; // 'ninguno' usa el ID único para no agrupar
+        }
+        if (!acc[key]) {
+          acc[key] = [];
+        }
+        acc[key].push(registro);
+        return acc;
+      },
+      {} as { [key: string]: DentalRecord[] }
+    );
+  };
 
+  const registrosAgrupados = agruparRegistros(registrosFiltrados);
   const serviciosCompletados = Object.values(registrosAgrupados).filter((grupo) =>
     grupo.every((registro) => registro.fechaFinal !== null && registro.valor_liquidado === 0)
   );
-
   const serviciosPendientes = Object.values(registrosAgrupados).filter(
     (grupo) => !grupo.every((registro) => registro.fechaFinal !== null && registro.valor_liquidado === 0)
   );
 
   const calcularPorcentaje = (grupo: DentalRecord[]) => {
     if (esAuxiliar) {
-      return grupo[0].esPacientePropio ? 0.20 : 0.10; // 20% para pacientes propios, 10% para pacientes del consultorio
+      return grupo[0].esPacientePropio ? 0.20 : 0.10;
     }
     const idPorc = grupo[0].idPorc;
-    return idPorc === 2 ? 0.50 : 0.40; // 50% o 40% para doctores según idPorc
+    return idPorc === 2 ? 0.50 : 0.40;
   };
 
   const calcularTotalGrupo = async (grupo: DentalRecord[]) => {
@@ -128,10 +140,10 @@ const Liquidacion: React.FC<LiquidacionProps> = ({ registros, setRegistros }) =>
             },
           }
         );
-        porcentaje = porcentajeData.porcentaje / 100;
+        porcentaje = (porcentajeData as { porcentaje: number }).porcentaje / 100;
       } catch (error) {
         console.error('Error al obtener el porcentaje:', error);
-        porcentaje = idPorc === 2 ? 0.50 : 0.40; // Valor por defecto para doctores
+        porcentaje = idPorc === 2 ? 0.50 : 0.40;
       }
     }
 
@@ -150,9 +162,13 @@ const Liquidacion: React.FC<LiquidacionProps> = ({ registros, setRegistros }) =>
     };
 
     fetchTotalLiquidacion();
-  }, [serviciosCompletados, esAuxiliar]);
+  }, [serviciosCompletados, esAuxiliar, modoAgrupacion]);
 
   const handleLiquidarGrupo = async (grupo: DentalRecord[]) => {
+    if (!doctorSeleccionado || !fechaInicio || !fechaFin) {
+      setError('Por favor, completa todos los filtros antes de liquidar.');
+      return;
+    }
     try {
       const totalGrupo = await calcularTotalGrupo(grupo);
       const nuevaLiquidacion = {
@@ -194,6 +210,10 @@ const Liquidacion: React.FC<LiquidacionProps> = ({ registros, setRegistros }) =>
   };
 
   const handleLiquidarTodos = async () => {
+    if (!doctorSeleccionado || !fechaInicio || !fechaFin) {
+      setError('Por favor, completa todos los filtros antes de liquidar.');
+      return;
+    }
     try {
       setMostrarLiquidacion(true);
       setServiciosLiquidados(serviciosCompletados);
@@ -307,6 +327,12 @@ const Liquidacion: React.FC<LiquidacionProps> = ({ registros, setRegistros }) =>
     <div className="max-w-7xl mx-auto px-4 py-6">
       <h2 className="text-3xl font-bold text-gray-800 mb-8">Liquidación - Clínica Smiley</h2>
 
+      {error && (
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+          <p>{error}</p>
+        </div>
+      )}
+
       <div className="bg-white shadow-lg rounded-lg p-6 mb-8">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-6">
           <div>
@@ -388,6 +414,20 @@ const Liquidacion: React.FC<LiquidacionProps> = ({ registros, setRegistros }) =>
               ))}
             </select>
           </div>
+
+          {/* Cambio: Añadido selector de modo de agrupación */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Modo de Agrupación</label>
+            <select
+              value={modoAgrupacion}
+              onChange={(e) => setModoAgrupacion(e.target.value as 'pacienteServicio' | 'paciente' | 'ninguno')}
+              className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            >
+              <option value="pacienteServicio">Paciente y Servicio</option>
+              <option value="paciente">Solo Paciente</option>
+              <option value="ninguno">Sin Agrupar</option>
+            </select>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -397,9 +437,7 @@ const Liquidacion: React.FC<LiquidacionProps> = ({ registros, setRegistros }) =>
           </div>
           <div className="bg-green-100 p-4 rounded-lg shadow-md">
             <h3 className="text-lg font-semibold text-green-900">Servicios Listos</h3>
-            <p className="text-2xl font-bold text-green-800">{serviciosCompletados.length}</
-
-p>
+            <p className="text-2xl font-bold text-green-800">{serviciosCompletados.length}</p>
           </div>
           <div className="bg-yellow-100 p-4 rounded-lg shadow-md">
             <h3 className="text-lg font-semibold text-yellow-900">Servicios Pendientes</h3>
@@ -602,7 +640,7 @@ p>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-green-600">{formatCOP(totalALiquidar)}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <button
-                          onClick={() => handleLiquidarGrupo([registro])}
+                          onClick={() => handleLiquidarGrupo(grupo)} // Cambio: Pasar todo el grupo en lugar de registro individual
                           className="px-4 py-2 rounded-md text-white font-medium bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200"
                         >
                           Liquidar
