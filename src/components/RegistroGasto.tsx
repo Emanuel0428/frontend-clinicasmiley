@@ -69,25 +69,32 @@ const RegistroGasto: React.FC = () => {
 
         const token = localStorage.getItem("token");
         const headers = { Authorization: `Bearer ${token}` };
-
-        const doctorsResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/doctors`, {
-          headers,
-          params: { id_sede },
-        });
+        const isEstadio = id_sede === "2";
 
         const assistantsResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/assistants`, {
           headers,
           params: { id_sede },
         });
 
-        const combinedResponsables = [
-          ...new Set([
-            ...(doctorsResponse.data as string[]),
-            ...(assistantsResponse.data as string[]),
-          ]),
-        ].sort();
+        let responsablesList: string[] = [...(assistantsResponse.data as string[])];
 
-        setResponsables(combinedResponsables);
+        if (isEstadio) {
+          const fijos = ["Liliana Gutiérrez", "Miriam"];
+          responsablesList = [...new Set([...responsablesList, ...fijos])].sort();
+        } else {
+          const doctorsResponse = await axios.get(`${import.meta.env.VITE_API_URL}/api/doctors`, {
+            headers,
+            params: { id_sede },
+          });
+          responsablesList = [
+            ...new Set([
+              ...(doctorsResponse.data as string[]),
+              ...responsablesList,
+            ]),
+          ].sort();
+        }
+
+        setResponsables(responsablesList);
       } catch (err: any) {
         console.error("Error al cargar responsables:", err);
         setError("No se pudo cargar la lista de responsables.");
